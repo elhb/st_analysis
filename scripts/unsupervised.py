@@ -190,6 +190,17 @@ def main(counts_table_files,
     file_writers = [open(os.path.join(outdir,
                                       "{}_clusters.tsv".format(os.path.splitext(os.path.basename(name))[0])),"w")
                     for name in counts_table_files]
+    
+    for name in counts_table_files: # WILL PRINT SAME OUTPUT TO ALL FILES NEED TO SLICE THE MATRIX HERE BASED ON THE ROW NAMES
+        norm_counts.to_csv(
+                        os.path.join(
+                            outdir,
+                            "{}_normalized_counts.tsv".format(
+                                os.path.splitext(os.path.basename(name))[0]
+                                )
+                            ),
+                        sep='\t'
+                    )
     # Write the coordinates and the label/class that they belong to
     spot_plot_data = defaultdict(lambda: [[],[],[],[]])
     for i, spot in enumerate(norm_counts.index):
@@ -202,7 +213,14 @@ def main(counts_table_files,
         spot_plot_data[index][1].append(y)
         spot_plot_data[index][2].append(labels[i])
         spot_plot_data[index][3].append(labels_colors[i])
-        file_writers[index].write("{0}\t{1}\n".format("{}x{}".format(x,y), labels[i]))
+        file_writers[index].write(
+            "{}\t{}\t{}\t{}\t{}\n".format(
+                "{}x{}".format(x,y),
+                labels[i],
+                reduced_data[i,0],
+                reduced_data[i,1],
+                reduced_data[i,2] if num_dimensions == 3 else 'NA')
+            )
     # Close the files
     for file_writer in file_writers:
         file_writer.close()
