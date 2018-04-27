@@ -36,7 +36,7 @@ The referred matrix format is the ST data format, a matrix of counts where spot 
 and the genes are column names. This matrix format (.TSV) is generated with the
 [ST Pipeline](https://github.com/SpatialTranscriptomicsResearch/st_pipeline)
 
-The scripts that allow you to pass the tissue HE image can optionally take a 3x3 alignment file.
+The scripts that allows you to pass the tissue HE image can optionally take a 3x3 alignment file.
 If the images are cropped to the exact array boundaries the alignment file is not needed
 unless you want to plot the image in the original image size. If the image is un-cropped
 then you need the alignment file to convert from spot coordinates to pixel coordinates.
@@ -53,7 +53,7 @@ We recommend that you install the latest R version 3.4 Once you have installed R
 a R terminal or Rstudio and type the following:
 
     source("https://bioconductor.org/biocLite.R")
-    biocLite("monocle")
+    biocLite("BiocParallel")
     biocLite("scran")
     biocLite("DESeq2")
     biocLite("Rtsne")
@@ -91,9 +91,11 @@ Note: we advice to install and update the developer tools packages
     conda create -n python3.4 python=3.4
     source activate python3.4
     pip install rpy2
+    pip install tzlocal
     conda install matplotlib
     conda install pandas
     conda install scikit-learn
+    conda install readline
     git clone https://github.com/SpatialTranscriptomicsResearch/st_analysis.git
     cd st_analysis
     python setup.py install

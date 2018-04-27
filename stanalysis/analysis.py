@@ -5,6 +5,7 @@ from stanalysis.normalization import RimportLibrary
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib import colors as mpcolors
 from collections import Counter
+import multiprocessing
 import rpy2.robjects.packages as rpackages
 import rpy2.robjects as robjects
 from rpy2.robjects import pandas2ri, r, numpy2ri, globalenv
@@ -16,14 +17,16 @@ def computeNClusters(counts, min_size=20):
     from the data using Scran::quickCluster"""
     pandas2ri.activate()
     r_counts = pandas2ri.py2ri(counts.transpose())
-    scran = RimportLibrary("scran")    
+    scran = RimportLibrary("scran")
+    multicore = RimportLibrary("BiocParallel")
+    multicore.register(multicore.MulticoreParam(multiprocessing.cpu_count()-1))  
     as_matrix = r["as.matrix"]
     clusters = scran.quickCluster(as_matrix(r_counts), min_size)
     n_clust = len(set(clusters))
     pandas2ri.deactivate()
     return n_clust
 
-def deaDESeq2(counts, conds, comparisons, size_factors=None):
+def deaDESeq2(counts, conds, comparisons, alpha, size_factors=None):
     """Makes a call to DESeq2 to
     perform D.E.A. in the given
     counts matrix with the given conditions and comparisons.
@@ -34,7 +37,8 @@ def deaDESeq2(counts, conds, comparisons, size_factors=None):
     try:
         pandas2ri.activate()
         deseq2 = RimportLibrary("DESeq2")
-        r("suppressMessages(library(DESeq2))")
+        multicore = RimportLibrary("BiocParallel")
+        multicore.register(multicore.MulticoreParam(multiprocessing.cpu_count()-1))
         # Create the R conditions and counts data
         r_counts = pandas2ri.py2ri(counts)
         cond = robjects.DataFrame({"conditions": robjects.StrVector(conds)})
@@ -49,15 +53,20 @@ def deaDESeq2(counts, conds, comparisons, size_factors=None):
             dds = r.nbinomWaldTest(dds)
         # Perform the comparisons and store results in list
         for A,B in comparisons:
-            result = r.results(dds, contrast=r.c("conditions", A, B))
-            result = pandas2ri.ri2py_dataframe(r['as.data.frame'](result))
+            result = r.results(dds, contrast=r.c("conditions", A, B), alpha=alpha)
+            result = r['as.data.frame'](result)
+            genes = r['rownames'](result)
+            result = pandas2ri.ri2py_dataframe(result)
+            # There seems to be a problem parsing the rownames from R to pandas
+            # so we do it manually
+            result.index = genes
             results.append(result)
         pandas2ri.deactivate()
     except Exception as e:
         raise e
     return results
 
-def deaScranDESeq2(counts, conds, comparisons, scran_clusters=False):
+def deaScranDESeq2(counts, conds, comparisons, alpha, scran_clusters=False):
     """Makes a call to DESeq2 with SCRAN to
     perform D.E.A. in the given
     counts matrix with the given conditions and comparisons.
@@ -69,11 +78,20 @@ def deaScranDESeq2(counts, conds, comparisons, scran_clusters=False):
         pandas2ri.activate()
         deseq2 = RimportLibrary("DESeq2")
         scran = RimportLibrary("scran")
+        multicore = RimportLibrary("BiocParallel")
+        multicore.register(multicore.MulticoreParam(multiprocessing.cpu_count()-1))
         as_matrix = r["as.matrix"]
         # Create the R conditions and counts data
         r_counts = pandas2ri.py2ri(counts)
         cond = robjects.StrVector(conds)
-        sce = r.newSCESet(countData=r_counts)
+        r_call = """
+            function(r_counts) {
+                sce = SingleCellExperiment(assays=list(counts=r_counts))
+                return(sce)
+            }
+        """
+        r_func = r(r_call)
+        sce = r_func(as_matrix(r_counts))
         if scran_clusters:
             r_clusters = scran.quickCluster(as_matrix(r_counts), max(n_cells/10, 10))
             min_cluster_size = min(Counter(r_clusters).values())
@@ -96,8 +114,13 @@ def deaScranDESeq2(counts, conds, comparisons, scran_clusters=False):
         dds = r.DESeq(dds)
         # Perform the comparisons and store results in list
         for A,B in comparisons:
-            result = r.results(dds, contrast=r.c("conditions", A, B))
-            result = pandas2ri.ri2py_dataframe(r['as.data.frame'](result))
+            result = r.results(dds, contrast=r.c("conditions", A, B), alpha=alpha)
+            result = r['as.data.frame'](result)
+            genes = r['rownames'](result)
+            result = pandas2ri.ri2py_dataframe(result)
+            # There seems to be a problem parsing the rownames from R to pandas
+            # so we do it manually
+            result.index = genes
             results.append(result)
         pandas2ri.deactivate()
     except Exception as e:
@@ -137,7 +160,9 @@ def Rtsne(counts, dimensions, theta=0.5, dims=50, perplexity=30, max_iter=1000):
     using the R package Rtsne"""
     pandas2ri.activate()
     r_counts = pandas2ri.py2ri(counts)
-    tsne = RimportLibrary("Rtsne")    
+    tsne = RimportLibrary("Rtsne")
+    multicore = RimportLibrary("BiocParallel")
+    multicore.register(multicore.MulticoreParam(multiprocessing.cpu_count()-1))
     as_matrix = r["as.matrix"]
     tsne_out = tsne.Rtsne(as_matrix(counts), 
                           dims=dimensions, 
